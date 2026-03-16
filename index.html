@@ -300,7 +300,7 @@ body{display:flex;flex-direction:column;height:100vh}
 /* ═══════════════════════════════════
    QUEUE VIEW
    ═══════════════════════════════════ */
-.view-cal  { display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden }
+.view-cal  { display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden }
 .view-queue{ display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden }
 .view-queue.active{ display:flex }
 .view-completed{ display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden }
@@ -1331,6 +1331,22 @@ body{display:flex;flex-direction:column;height:100vh}
   </div>
   <div class="completed-list" id="completedList"></div>
 </div>
+<!-- CALENDAR VIEW (monthly calendar + sidebar detail) -->
+<div class="view-cal" id="viewCal">
+  <div class="layout">
+    <div class="cal-wrap" id="calWrap"></div>
+    <div class="sidebar">
+      <div class="sb-hdr">
+        <div class="sb-lbl">Day Detail</div>
+        <div class="sb-date" id="sbDate">Select a day</div>
+      </div>
+      <div class="sb-body" id="sbBody">
+        <div class="empty-sel">Click a field day on the calendar to see route details.</div>
+      </div>
+      <div id="sbStops"></div>
+    </div>
+  </div>
+</div>
 <!-- INCOMPLETE STOP MODAL -->
 <div class="incomplete-overlay" id="incompleteOverlay">
   <div class="incomplete-modal">
@@ -1695,6 +1711,12 @@ function buildTabs() {
   compBtn.innerHTML = `✓ Completed <span class="mtab-queue-badge done">${qDone}</span>`;
   compBtn.onclick = () => setView('completed');
   cont.appendChild(compBtn);
+  // ── Tab: Calendar ──
+  const calBtn = document.createElement('button');
+  calBtn.className = 'mtab-main' + (activeView==='calendar'?' active':'');
+  calBtn.innerHTML = '📆 Calendar';
+  calBtn.onclick = () => setView('calendar');
+  cont.appendChild(calBtn);
   // ── Device countdown badges ──
   const countdownWrap = document.createElement('div');
   countdownWrap.style.cssText = 'display:flex;align-items:center;gap:6px;padding:0 12px';
@@ -1979,7 +2001,7 @@ function showDetail(ds) {
   const mapsURL = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(HOME)}&destination=${encodeURIComponent(HOME)}&waypoints=${wps}&travelmode=driving`;
   let html = `<div class="day-sum">
     <div class="ds-r"><span class="ds-l">Stops</span><span class="ds-v">${stops.length}</span></div>
-    <div class="ds-r"><span class="ds-l">Total ${p.deviceLabel||'MFD'}s</span><span class="ds-v">${totalMfd}</span></div>
+    <div class="ds-r"><span class="ds-l">Total ${plan.deviceLabel||'MFD'}s</span><span class="ds-v">${totalMfd}</span></div>
     <div class="ds-r"><span class="ds-l">Inspection + admin</span><span class="ds-v">${fmt(totalVisit)}</span></div>
     <div class="ds-r"><span class="ds-l">${driveLbl}</span><span class="ds-v" style="${driveClr}">${fmt(estDrive)} · ${_driveData.miles} mi</span></div>
     <div class="ds-r"><span class="ds-l">Breaks (2×15)</span><span class="ds-v yellow">30 min</span></div>
@@ -2016,7 +2038,7 @@ function showDetail(ds) {
       <div class="sc-addr">📍 ${s.addr}, ${s.city}, IL</div>
       <div class="sc-row">
         <span class="badge ${bc}">${tagLabel}</span>
-        <span class="badge b-muted">${s.mfd||s.scales||0} ${p.deviceLabel||'MFD'}s</span>
+        <span class="badge b-muted">${s.mfd||s.scales||0} ${plan.deviceLabel||'MFD'}s</span>
         ${isOT?`<span class="badge b-orange">+${fmt(s.ot||0)} OT</span>`:''}
       </div>
       <div class="sc-time">Est. visit: ${fmt(s.visit_mins)}</div>
@@ -2819,11 +2841,14 @@ function setView(v) {
   document.getElementById('viewWeekly').classList.toggle('active', v==='weekly');
   document.getElementById('viewQueue').classList.toggle('active', v==='queue');
   document.getElementById('viewCompleted').classList.toggle('active', v==='completed');
+  const viewCal = document.getElementById('viewCal');
+  if (viewCal) viewCal.classList.toggle('active', v==='calendar');
   buildTabs();
   if (v === 'queue')     renderQueue();
   if (v === 'completed') renderCompleted();
   if (v === 'planner')   renderPlanner();
   if (v === 'weekly')  { renderWeekly(); }
+  if (v === 'calendar') { renderCal(); }
   updateImportBar();
 }
 // ── Queue state ──
@@ -3941,6 +3966,7 @@ const _origSetView = setView;
 // Drag-drop wiring — attach to supervisor cal container
 function initDropZone() {
   const overlay = document.getElementById('dropOverlay');
+  if (!overlay) return;
   let dragCount = 0;
   document.addEventListener('dragenter', e => {
     if (!e.dataTransfer.types.includes('Files')) return;
